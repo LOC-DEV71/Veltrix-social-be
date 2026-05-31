@@ -11,6 +11,9 @@ const { initSocket } = require('./socket');
 connectDB();
 
 const app = express();
+// Enable trust proxy to get real client IP when behind reverse proxies (Nginx, Render, Vercel, etc.)
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 
 // Socket.io initialization with custom handler file
