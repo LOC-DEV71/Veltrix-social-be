@@ -69,6 +69,7 @@ const login = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `Đăng nhập quản trị thành công! Xin chào ${account.username}.`,
+      token,
       data: {
         _id: account._id,
         username: account.username,
