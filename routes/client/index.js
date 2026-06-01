@@ -5,6 +5,7 @@ const router = express.Router();
 const authRoutes = require('./authRoutes');
 const shopRoutes = require('./shopRoutes');
 const friendRoutes = require('./friendRoutes');
+const webrtcRoutes = require('./webrtcRoutes');
 
 // Import profile controller for backwards compatibility
 const { getUserProfile } = require('../../controllers/client/shopController');
@@ -28,5 +29,8 @@ router.get('/users/inventory', verifyToken, getUserInventory);
 
 // 🟢 Friends routing
 router.use('/friends', friendRoutes);
+
+// 🟢 WebRTC routing
+router.use('/webrtc', webrtcRoutes);
 
 module.exports = router;
