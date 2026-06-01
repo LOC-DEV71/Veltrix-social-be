@@ -2,14 +2,84 @@ const Product = require('../../models/Product');
 const Category = require('../../models/Category');
 const User = require('../../models/User');
 const Inventory = require('../../models/Inventory');
+const PremiumProduct = require('../../models/PremiumProduct');
 const jwt = require('jsonwebtoken');
+
+// Helper to clean up expired premium items
+const cleanupExpiredItems = async (user) => {
+  if (!user) return user;
+  
+  const inventory = await Inventory.findOne({ user: user._id });
+  if (!inventory) return user;
+
+  const now = new Date();
+  let hasExpiredItems = false;
+  
+  // Find expired items or items to revoke if user lost premium
+  let expiredItems = [];
+  if (!user.isPremium) {
+    // If user is no longer premium, revoke all items that were collected as a premium perk
+    expiredItems = inventory.items.filter(item => item.isPremiumPerk === true || (item.expiresAt != null && item.expiresAt < now));
+  } else {
+    // Normal check: remove items past their expiration date
+    expiredItems = inventory.items.filter(item => item.expiresAt && item.expiresAt < now);
+  }
+  
+  if (expiredItems.length > 0) {
+    hasExpiredItems = true;
+    
+    // Remove from inventory
+    if (!user.isPremium) {
+      inventory.items = inventory.items.filter(item => item.isPremiumPerk !== true && (!item.expiresAt || item.expiresAt >= now));
+    } else {
+      inventory.items = inventory.items.filter(item => !item.expiresAt || item.expiresAt >= now);
+    }
+    await inventory.save();
+    
+    // Remove from User document
+    expiredItems.forEach(item => {
+      const prodIdStr = item.product.toString();
+      
+      // Remove from owned arrays safely using Mongoose pull
+      if (user.ownedFrames) user.ownedFrames.pull(item.product);
+      if (user.ownedNameplates) user.ownedNameplates.pull(item.product);
+      
+      // Safely get active item IDs (handles both populated and unpopulated)
+      const activeFrameId = user.activeFrame ? (user.activeFrame._id ? user.activeFrame._id.toString() : user.activeFrame.toString()) : null;
+      const activeNameplateId = user.activeNameplate ? (user.activeNameplate._id ? user.activeNameplate._id.toString() : user.activeNameplate.toString()) : null;
+      
+      // Unequip if active
+      if (activeFrameId === prodIdStr) {
+        user.activeFrame = null;
+        user.activeFrameStaticUrl = "";
+        user.activeFrameAnimatedUrl = "";
+      }
+      
+      if (activeNameplateId === prodIdStr) {
+        user.activeNameplate = null;
+        user.activeNameplateStaticUrl = "";
+        user.activeNameplateAnimatedUrl = "";
+      }
+    });
+    
+    await user.save();
+  }
+  
+  return user;
+};
 
 // @desc    Get all avatar frames
 // @route   GET /api/products
 // @access  Public
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find({}).populate('category').sort({ price: 1 });
+    const products = await Product.find({})
+      .populate('category')
+      .populate({
+        path: 'comboItems',
+        populate: { path: 'category' }
+      })
+      .sort({ price: 1 });
     res.status(200).json({
       status: 'success',
       count: products.length,
@@ -20,6 +90,180 @@ const getProducts = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Lỗi máy chủ khi lấy danh sách sản phẩm!'
+    });
+  }
+};
+
+// @desc    Get active premium perks
+// @route   GET /api/shop/premium
+// @access  Public
+const getPremiumPerks = async (req, res) => {
+  try {
+    const now = new Date();
+    // Only return premium perks that are currently active
+    const premiumItems = await PremiumProduct.find({
+      startDate: { $lte: now },
+      endDate: { $gt: now }
+    }).populate({
+      path: 'product',
+      populate: [
+        { path: 'category' },
+        { 
+          path: 'comboItems',
+          populate: { path: 'category' }
+        }
+      ]
+    });
+
+    // Map to a cleaner format where the top level IS the product, but marked as premium
+    const mapped = premiumItems.map(p => {
+      const prod = p.product.toObject();
+      prod.isPremium = true;
+      prod.premiumStartDate = p.startDate;
+      prod.premiumEndDate = p.endDate;
+      return prod;
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: mapped
+    });
+  } catch (error) {
+    console.error(`🔴 Get Premium Perks Error: ${error.message}`);
+    res.status(500).json({
+      status: 'error',
+      message: 'Lỗi khi lấy danh sách phần thưởng Premium!'
+    });
+  }
+};
+
+// @desc    Claim a premium perk
+// @route   POST /api/shop/claim-premium
+// @access  Private
+const claimPremiumProduct = async (req, res) => {
+  try {
+    const { userId, productId } = req.body;
+
+    if (!userId || !productId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Thiếu thông tin nhận quà!'
+      });
+    }
+
+    // 1. Fetch User and check Premium
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'Không tìm thấy user!' });
+    }
+
+    if (!user.isPremium) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Bạn phải là hội viên Premium mới nhận được phần thưởng này!'
+      });
+    }
+
+    // 2. Check if product is currently active in PremiumProduct
+    const now = new Date();
+    const premiumConfig = await PremiumProduct.findOne({
+      product: productId,
+      startDate: { $lte: now },
+      endDate: { $gt: now }
+    }).populate('product');
+
+    if (!premiumConfig || !premiumConfig.product) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Sản phẩm này không còn nằm trong danh sách quà tặng Premium!'
+      });
+    }
+
+    const product = premiumConfig.product;
+
+    let inventory = await Inventory.findOne({ user: userId });
+    if (!inventory) {
+      inventory = new Inventory({ user: userId, items: [] });
+    }
+
+    // Lấy danh sách item cần xử lý (hỗ trợ combo)
+    let itemsToProcess = [];
+    if (product.isCombo) {
+      if (!product.comboItems || product.comboItems.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Combo rỗng!' });
+      }
+      // Populate combo items to process
+      const populatedProduct = await Product.findById(product._id).populate({
+        path: 'comboItems',
+        populate: { path: 'category' }
+      });
+      itemsToProcess = populatedProduct.comboItems;
+    } else {
+      // populate category
+      const populatedProduct = await Product.findById(product._id).populate('category');
+      itemsToProcess = [populatedProduct];
+    }
+
+    let newItemsCount = 0;
+
+    for (const item of itemsToProcess) {
+      const categorySlug = item.category ? item.category.slug : 'unknown';
+      const isFrame = categorySlug === 'khung-vien';
+      const isNameplate = categorySlug === 'bang-ten';
+
+      // Kiểm tra xem đã nhận hoặc mua chưa
+      let alreadyOwned = false;
+      if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
+      if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+
+      // Nếu đã sở hữu vĩnh viễn (không phải premium perk, không có expiresAt) thì skip
+      // Nếu đã sở hữu nhưng là premium perk thì vẫn skip vì đang xử lý premium
+      if (alreadyOwned) continue;
+
+      if (isFrame) {
+        user.ownedFrames.push(item._id);
+        user.activeFrame = item._id;
+        user.activeFrameStaticUrl = item.staticUrl || null;
+        user.activeFrameAnimatedUrl = item.animatedUrl || null;
+      } else if (isNameplate) {
+        user.ownedNameplates.push(item._id);
+        user.activeNameplate = item._id;
+        user.activeNameplateStaticUrl = item.staticUrl || null;
+        user.activeNameplateAnimatedUrl = item.animatedUrl || null;
+      }
+
+      inventory.items.push({
+        product: item._id,
+        category: item.category ? item.category._id : null,
+        categorySlug: categorySlug,
+        purchasedAt: new Date(),
+        isPremiumPerk: true,
+        expiresAt: premiumConfig.endDate
+      });
+
+      newItemsCount++;
+    }
+
+    if (newItemsCount === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Bạn đã sở hữu phần thưởng này rồi!'
+      });
+    }
+
+    await inventory.save();
+    await user.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Nhận quà Premium thành công! Đã tự động trang bị.'
+    });
+
+  } catch (error) {
+    console.error(`🔴 Claim Premium Error: ${error.message}`);
+    res.status(500).json({
+      status: 'error',
+      message: 'Đã xảy ra lỗi khi nhận quà!'
     });
   }
 };
@@ -86,6 +330,9 @@ const getUserProfile = async (req, res) => {
       });
     }
 
+    // Run cleanup
+    user = await cleanupExpiredItems(user);
+
     res.status(200).json({
       status: 'success',
       data: user
@@ -108,6 +355,12 @@ const getUserInventory = async (req, res) => {
 
     if (!userId) {
       return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+
+    // Run cleanup before returning
+    const user = await User.findById(userId);
+    if (user) {
+      await cleanupExpiredItems(user);
     }
 
     const inventory = await Inventory.findOne({ user: userId })
@@ -172,11 +425,17 @@ const buyProduct = async (req, res) => {
     }
 
     // 1. Fetch Product
-    const product = await Product.findById(productId).populate('category');
+    const product = await Product.findById(productId)
+      .populate('category')
+      .populate({
+        path: 'comboItems',
+        populate: { path: 'category' }
+      });
+
     if (!product) {
       return res.status(404).json({
         status: 'error',
-        message: 'Sản phẩm (Khung) không tồn tại trên hệ thống!'
+        message: 'Sản phẩm không tồn tại trên hệ thống!'
       });
     }
 
@@ -189,55 +448,118 @@ const buyProduct = async (req, res) => {
       });
     }
 
-    // 3. Check if already purchased based on category
-    const categorySlug = product.category ? product.category.slug : 'unknown';
-    const isFrame = categorySlug === 'khung-vien';
-    const isNameplate = categorySlug === 'bang-ten';
-
-    if (isFrame && user.ownedFrames.includes(productId)) {
-      return res.status(400).json({ status: 'error', message: 'Bạn đã sở hữu khung avatar này rồi!' });
-    }
-    if (isNameplate && user.ownedNameplates.includes(productId)) {
-      return res.status(400).json({ status: 'error', message: 'Bạn đã sở hữu bảng tên này rồi!' });
-    }
-
-    // 4. Check if coins sufficient
-    if (user.coins < product.price) {
-      return res.status(400).json({
-        status: 'error',
-        message: `Bạn không đủ Coin để thực hiện giao dịch! Cần thêm ${product.price - user.coins} Coin.`
-      });
-    }
-
-    // 5. Deduct coins and auto-equip
-    user.coins -= product.price;
-    
-    if (isFrame) {
-      user.ownedFrames.push(productId);
-      user.activeFrame = productId;
-      user.activeFrameStaticUrl = product.staticUrl || null;
-      user.activeFrameAnimatedUrl = product.animatedUrl || null;
-    } else if (isNameplate) {
-      user.ownedNameplates.push(productId);
-      user.activeNameplate = productId;
-      user.activeNameplateStaticUrl = product.staticUrl || null;
-      user.activeNameplateAnimatedUrl = product.animatedUrl || null;
-    }
-
-    await user.save();
-
-    // 6. Update separate Inventory Table
     let inventory = await Inventory.findOne({ user: userId });
     if (!inventory) {
       inventory = new Inventory({ user: userId, items: [] });
     }
-    
-    inventory.items.push({
-      product: productId,
-      category: product.category ? product.category._id : null,
-      categorySlug: product.category ? product.category.slug : null,
-      purchasedAt: new Date()
-    });
+
+    // Lấy danh sách các item cần process
+    let itemsToProcess = [];
+    if (product.isCombo) {
+      if (!product.comboItems || product.comboItems.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Gói combo này đang trống!' });
+      }
+      itemsToProcess = product.comboItems;
+    } else {
+      itemsToProcess = [product];
+    }
+
+    let newItemsCount = 0;
+    let ownedItemsCount = 0;
+    let effectivePrice = product.price;
+
+    // === TÍNH GIÁ ===
+    if (product.isCombo) {
+      // Combo: trừ giá các item đã sở hữu
+      let discount = 0;
+      for (const item of itemsToProcess) {
+        const categorySlug = item.category ? item.category.slug : 'unknown';
+        const isFrame = categorySlug === 'khung-vien';
+        const isNameplate = categorySlug === 'bang-ten';
+
+        let alreadyOwned = false;
+        if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
+        if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+
+        if (alreadyOwned) {
+          discount += item.price || 0;
+        }
+      }
+      effectivePrice -= discount;
+      if (effectivePrice < 0) effectivePrice = 0;
+    }
+
+    // Check coin
+    if (user.coins < effectivePrice) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Bạn không đủ Coin để thực hiện giao dịch! Cần thêm ${effectivePrice - user.coins} Coin.`
+      });
+    }
+
+    // === XỬ LÝ TỪNG ITEM ===
+    for (const item of itemsToProcess) {
+      const categorySlug = item.category ? item.category.slug : 'unknown';
+      const isFrame = categorySlug === 'khung-vien';
+      const isNameplate = categorySlug === 'bang-ten';
+
+      let alreadyOwned = false;
+      if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
+      if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+
+      // Ghi đè thành vĩnh viễn
+      let isUpgradeToPermanent = false;
+      if (alreadyOwned) {
+        const existingItem = inventory.items.find(i => i.product.toString() === item._id.toString());
+        if (existingItem && (existingItem.expiresAt || existingItem.isPremiumPerk)) {
+          isUpgradeToPermanent = true;
+          alreadyOwned = false; // Xử lý như mới để cập nhật
+          
+          // Xóa item cũ trong inventory để lát push cái mới
+          inventory.items = inventory.items.filter(i => i.product.toString() !== item._id.toString());
+        }
+      }
+
+      if (!alreadyOwned) {
+        if (!isUpgradeToPermanent) {
+          if (isFrame) {
+            user.ownedFrames.push(item._id);
+            user.activeFrame = item._id;
+            user.activeFrameStaticUrl = item.staticUrl || null;
+            user.activeFrameAnimatedUrl = item.animatedUrl || null;
+          } else if (isNameplate) {
+            user.ownedNameplates.push(item._id);
+            user.activeNameplate = item._id;
+            user.activeNameplateStaticUrl = item.staticUrl || null;
+            user.activeNameplateAnimatedUrl = item.animatedUrl || null;
+          }
+        }
+
+        inventory.items.push({
+          product: item._id,
+          category: item.category ? item.category._id : null,
+          categorySlug: item.category ? item.category.slug : null,
+          purchasedAt: new Date()
+        });
+
+        newItemsCount++;
+      } else {
+        ownedItemsCount++;
+      }
+    }
+
+    if (!product.isCombo && newItemsCount === 0) {
+      return res.status(400).json({ status: 'error', message: 'Bạn đã sở hữu sản phẩm này rồi!' });
+    }
+
+    if (product.isCombo && newItemsCount === 0) {
+       return res.status(400).json({ status: 'error', message: 'Bạn đã sở hữu tất cả sản phẩm trong gói combo này rồi!' });
+    }
+
+    // Trừ coin
+    user.coins -= effectivePrice;
+
+    await user.save();
     await inventory.save();
 
     // Populate user profile for updated return
@@ -268,5 +590,7 @@ module.exports = {
   getUserProfile,
   getUserInventory,
   loginDev,
-  buyProduct
+  buyProduct,
+  getPremiumPerks,
+  claimPremiumProduct
 };

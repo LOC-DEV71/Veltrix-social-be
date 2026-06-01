@@ -15,12 +15,12 @@ const productSchema = new mongoose.Schema(
     },
     staticUrl: {
       type: String,
-      required: [true, 'Static frame image URL is required'],
+      required: function() { return !this.isCombo; },
       trim: true,
     },
     animatedUrl: {
       type: String,
-      required: [true, 'Animated frame GIF/image URL is required'],
+      required: function() { return !this.isCombo; },
       trim: true,
     },
     // Liên kết tới danh mục sản phẩm (tùy chọn — không bắt buộc để không phá vỡ data cũ)
@@ -32,7 +32,15 @@ const productSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
-    }
+    },
+    isCombo: {
+      type: Boolean,
+      default: false
+    },
+    comboItems: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product'
+    }]
   },
   {
     timestamps: true,

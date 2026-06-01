@@ -1,6 +1,7 @@
 const User = require('../../models/User');
 const Product = require('../../models/Product');
 const Category = require('../../models/Category');
+const PremiumProduct = require('../../models/PremiumProduct');
 const { cloudinary } = require('../../config/cloudinary');
 
 // @desc    Add new avatar frame product to the MongoDB shop
@@ -11,16 +12,23 @@ const addProduct = async (req, res) => {
     console.log('🔴 DEBUG req.body:', req.body);
     console.log('🔴 DEBUG req.files:', req.files);
     
-    const { name, price, category } = req.body;
+    const { name, price, category, isCombo, comboItems, isPremium, premiumDurationDays } = req.body;
+
+    let parsedComboItems = [];
+    if (isCombo === 'true' || isCombo === true) {
+      if (comboItems) {
+        parsedComboItems = typeof comboItems === 'string' ? JSON.parse(comboItems) : comboItems;
+      }
+    }
 
     // Lấy URL từ file đã upload qua Cloudinary
     const staticUrl = req.files?.staticImage ? req.files.staticImage[0].path : null;
     const animatedUrl = req.files?.animatedImage ? req.files.animatedImage[0].path : null;
 
-    if (!name || price === undefined || !staticUrl || !animatedUrl) {
+    if (!name || price === undefined || Number(price) <= 0 || (!(isCombo === 'true' || isCombo === true) && (!staticUrl || !animatedUrl))) {
       return res.status(400).json({
         success: false,
-        message: 'Vui lòng cung cấp đầy đủ thông tin: name, price và tải lên 2 ảnh (static, animated)'
+        message: 'Vui lòng cung cấp đầy đủ thông tin: name, price (>0) và tải lên 2 ảnh (nếu không phải Combo)'
       });
     }
 
@@ -35,16 +43,23 @@ const addProduct = async (req, res) => {
       }
     }
 
-    const newProduct = await Product.create({
-      name,
-      price,
+    const { name: pName, price: pPrice, category: pCategory, isCombo: pIsCombo, comboItems: pComboItems, isPremium: pIsPremium, premiumEndDate } = req.body;
+
+    const newProduct = new Product({
+      name: pName,
+      price: Number(pPrice),
       staticUrl,
       animatedUrl,
-      category: category || null
+      category: pCategory || null,
+      isCombo: pIsCombo === 'true' || pIsCombo === true,
+      comboItems: pComboItems ? JSON.parse(pComboItems) : []
     });
 
-    // Populate category để trả về thông tin đầy đủ
+    await newProduct.save();
+
+    // Populate category and comboItems để trả về thông tin đầy đủ
     await newProduct.populate('category', 'name slug');
+    await newProduct.populate('comboItems', 'name price staticUrl animatedUrl');
 
     res.status(201).json({
       success: true,
@@ -65,7 +80,7 @@ const addProduct = async (req, res) => {
 // @access  Private (Admin Only)
 const getAllProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', category = '', sort = 'newest' } = req.query;
+    const { page = 1, limit = 10, search = '', category = '', sort = 'newest', excludeCombo, excludePremium } = req.query;
     
     // Build query
     const query = {};
@@ -74,6 +89,14 @@ const getAllProducts = async (req, res) => {
     }
     if (category) {
       query.category = category;
+    }
+    if (excludeCombo === 'true') {
+      query.isCombo = { $ne: true };
+    }
+    if (excludePremium === 'true') {
+      const premiumProducts = await PremiumProduct.find().select('product');
+      const premiumProductIds = premiumProducts.map(p => p.product);
+      query._id = { $nin: premiumProductIds };
     }
 
     // Build sort options
@@ -86,6 +109,7 @@ const getAllProducts = async (req, res) => {
 
     const products = await Product.find(query)
       .populate('category', 'name slug parentId')
+      .populate('comboItems', 'name price staticUrl animatedUrl')
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit));
@@ -128,16 +152,40 @@ const getCloudinaryPublicId = (url) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, price, category } = req.body;
+    const { name, price, category, isCombo, comboItems, isPremium, premiumEndDate } = req.body;
 
     const existingProduct = await Product.findById(id);
     if (!existingProduct) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm!' });
     }
 
-    const updateData = { name, price: Number(price) };
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (price !== undefined) {
+      if (Number(price) <= 0) {
+        return res.status(400).json({ success: false, message: 'Giá sản phẩm phải lớn hơn 0!' });
+      }
+      updateData.price = Number(price);
+    }
+    if (category) updateData.category = category;
+    if (isCombo !== undefined) {
+      updateData.isCombo = isCombo === 'true' || isCombo === true;
+    }
+    if (comboItems) {
+      updateData.comboItems = JSON.parse(comboItems);
+    }
+
     if (req.body.isActive !== undefined) {
       updateData.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    }
+
+    if (isCombo !== undefined) {
+      updateData.isCombo = isCombo === 'true' || isCombo === true;
+      if (updateData.isCombo && comboItems) {
+        updateData.comboItems = typeof comboItems === 'string' ? JSON.parse(comboItems) : comboItems;
+      } else if (!updateData.isCombo) {
+        updateData.comboItems = [];
+      }
     }
 
     if (category !== undefined) {
@@ -162,7 +210,8 @@ const updateProduct = async (req, res) => {
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true })
-      .populate('category', 'name slug');
+      .populate('category', 'name slug')
+      .populate('comboItems', 'name price staticUrl animatedUrl');
 
     res.status(200).json({
       success: true,
@@ -195,7 +244,7 @@ const deleteProduct = async (req, res) => {
 
     // Xóa reference trong User.ownedFrames và activeFrame
     await User.updateMany({ ownedFrames: id }, { $pull: { ownedFrames: id } });
-    await User.updateMany({ activeFrame: id }, { $set: { activeFrame: null } });
+    await User.updateMany({ activeFrame: id }, { activeFrame: null, activeFrameStaticUrl: null, activeFrameAnimatedUrl: null });
 
     await Product.findByIdAndDelete(id);
 

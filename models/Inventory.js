@@ -4,7 +4,9 @@ const inventoryItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
   categorySlug: { type: String },
-  purchasedAt: { type: Date, default: Date.now }
+  purchasedAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, default: null },
+  isPremiumPerk: { type: Boolean, default: false }
 });
 
 const inventorySchema = new mongoose.Schema({
