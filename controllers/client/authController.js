@@ -80,9 +80,11 @@ const register = async (req, res) => {
     res.clearCookie('banType');
 
     // Set clientToken inside HttpOnly cookie
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('clientToken', token, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
 
@@ -176,9 +178,11 @@ const login = async (req, res) => {
     res.clearCookie('banType');
 
     // Set clientToken inside HttpOnly cookie
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('clientToken', token, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
 
@@ -264,7 +268,12 @@ const getMe = async (req, res) => {
 // @route   POST /api/auth/logout
 // @access  Public
 const logout = async (req, res) => {
-  res.clearCookie('clientToken');
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('clientToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+  });
   res.status(200).json({
     success: true,
     message: 'Đăng xuất tài khoản người dùng thành công!'

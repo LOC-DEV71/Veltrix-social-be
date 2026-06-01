@@ -60,9 +60,11 @@ const login = async (req, res) => {
     );
 
     // Save token inside HttpOnly secure cookie
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('adminToken', token, {
       httpOnly: true,
-      secure: false, // set to true in production if running HTTPS
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
@@ -122,7 +124,12 @@ const getMe = async (req, res) => {
 // @route   POST /api/admin/auth/logout
 // @access  Public
 const logout = async (req, res) => {
-  res.clearCookie('adminToken');
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('adminToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+  });
   res.status(200).json({
     success: true,
     message: 'Đã đăng xuất tài khoản quản trị thành công!'
