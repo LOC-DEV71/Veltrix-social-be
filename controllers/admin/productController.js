@@ -65,14 +65,43 @@ const addProduct = async (req, res) => {
 // @access  Private (Admin Only)
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({})
+    const { page = 1, limit = 10, search = '', category = '', sort = 'newest' } = req.query;
+    
+    // Build query
+    const query = {};
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+    if (category) {
+      query.category = category;
+    }
+
+    // Build sort options
+    let sortOptions = { createdAt: -1 };
+    if (sort === 'oldest') sortOptions = { createdAt: 1 };
+    if (sort === 'price_asc') sortOptions = { price: 1 };
+    if (sort === 'price_desc') sortOptions = { price: -1 };
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const products = await Product.find(query)
       .populate('category', 'name slug parentId')
-      .sort({ createdAt: -1 });
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(Number(limit));
+
+    const totalProducts = await Product.countDocuments(query);
+    const totalPages = Math.ceil(totalProducts / Number(limit));
 
     res.status(200).json({
       success: true,
-      count: products.length,
-      data: products
+      data: products,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalPages,
+        totalProducts
+      }
     });
   } catch (error) {
     console.error(`🔴 Admin Get Products Controller Error: ${error.message}`);
@@ -107,6 +136,9 @@ const updateProduct = async (req, res) => {
     }
 
     const updateData = { name, price: Number(price) };
+    if (req.body.isActive !== undefined) {
+      updateData.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    }
 
     if (category !== undefined) {
       if (category) {
@@ -177,9 +209,51 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+// @desc    Perform bulk action on products
+// @route   PUT /api/admin/products/bulk
+// @access  Private (Admin Only)
+const bulkActionProducts = async (req, res) => {
+  try {
+    const { ids, action } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Vui lòng chọn ít nhất một sản phẩm!' });
+    }
+
+    if (action === 'activate') {
+      await Product.updateMany({ _id: { $in: ids } }, { $set: { isActive: true } });
+      res.status(200).json({ success: true, message: `Đã hiển thị ${ids.length} sản phẩm.` });
+    } else if (action === 'deactivate') {
+      await Product.updateMany({ _id: { $in: ids } }, { $set: { isActive: false } });
+      res.status(200).json({ success: true, message: `Đã ẩn ${ids.length} sản phẩm.` });
+    } else if (action === 'delete') {
+      // Find all products to delete images
+      const products = await Product.find({ _id: { $in: ids } });
+      for (const product of products) {
+        const staticId = getCloudinaryPublicId(product.staticUrl);
+        const animatedId = getCloudinaryPublicId(product.animatedUrl);
+        if (staticId) await cloudinary.uploader.destroy(staticId);
+        if (animatedId) await cloudinary.uploader.destroy(animatedId);
+      }
+      
+      // Remove references
+      await User.updateMany({ ownedFrames: { $in: ids } }, { $pullAll: { ownedFrames: ids } });
+      await User.updateMany({ activeFrame: { $in: ids } }, { $set: { activeFrame: null } });
+      
+      await Product.deleteMany({ _id: { $in: ids } });
+      res.status(200).json({ success: true, message: `Đã xóa ${ids.length} sản phẩm.` });
+    } else {
+      res.status(400).json({ success: false, message: 'Hành động không hợp lệ!' });
+    }
+  } catch (error) {
+    console.error(`🔴 Admin Bulk Action Controller Error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Lỗi khi thực hiện thao tác hàng loạt!' });
+  }
+};
+
 module.exports = {
   addProduct,
   getAllProducts,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  bulkActionProducts
 };

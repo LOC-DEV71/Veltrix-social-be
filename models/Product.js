@@ -28,6 +28,10 @@ const productSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category',
       default: null
+    },
+    isActive: {
+      type: Boolean,
+      default: true
     }
   },
   {

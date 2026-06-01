@@ -7,7 +7,8 @@ const {
   addProduct,
   getAllProducts,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  bulkActionProducts
 } = require('../../controllers/admin/productController');
 
 // Cấu hình multer xử lý 2 trường ảnh
@@ -24,6 +25,11 @@ router.get('/list', verifyToken, isAdmin, getAllProducts);
 // @route   POST /api/admin/products
 // @desc    Add new product
 router.post('/', cpUpload, addProduct);
+
+// @route   PUT /api/admin/products/bulk
+// @desc    Perform bulk actions on products
+// @access  Private (Admin Only)
+router.put('/bulk', verifyToken, isAdmin, bulkActionProducts);
 
 // @route   PUT /api/admin/products/:id
 // @desc    Update a product
