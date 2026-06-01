@@ -27,6 +27,9 @@ const register = async (req, res) => {
       
       return res.status(403).json({
         success: false,
+        isBanned: true,
+        banType: ipBan.banType,
+        reason: ipBan.reason,
         message: `Địa chỉ IP của bạn đã bị cấm. Lý do: ${ipBan.reason}`
       });
     }
@@ -136,6 +139,9 @@ const login = async (req, res) => {
       
       return res.status(403).json({
         success: false,
+        isBanned: true,
+        banType: isBanned.banType,
+        reason: isBanned.reason,
         message: `Tài khoản hoặc IP này đã bị cấm. Lý do: ${isBanned.reason}`
       });
     }
