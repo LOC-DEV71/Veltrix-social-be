@@ -102,7 +102,7 @@ exports.getMyCommunities = async (req, res) => {
     const communities = await Community.find({
       'members.user': req.user.id
     })
-    .populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus')
+    .populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus themeColors')
     .sort('-createdAt');
 
     res.status(200).json({
@@ -153,7 +153,7 @@ exports.getCommunityChannels = async (req, res) => {
 exports.getCommunityById = async (req, res) => {
   try {
     const community = await Community.findById(req.params.id)
-      .populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus');
+      .populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus themeColors');
 
     if (!community) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy cộng đồng' });
@@ -344,7 +344,7 @@ exports.updateMemberRole = async (req, res) => {
     await community.save();
 
     // Populate user to return the updated member with user details
-    await community.populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus');
+    await community.populate('members.user', 'username displayName avatar activeFrameAnimatedUrl activeFrameStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeNameplateStaticUrl role isPremium bannerColor bannerImage customStatus themeColors');
     
     // Get the updated member
     const updatedMember = community.members.find(m => m.user._id.toString() === memberId);

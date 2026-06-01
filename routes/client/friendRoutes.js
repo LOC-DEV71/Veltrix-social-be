@@ -10,5 +10,6 @@ router.post('/request', friendController.sendFriendRequest);
 router.post('/accept', friendController.acceptFriendRequest);
 router.post('/decline', friendController.declineFriendRequest);
 router.delete('/remove/:targetId', friendController.removeFriend);
+router.get('/mutual/:userId', friendController.getMutualFriends);
 
 module.exports = router;

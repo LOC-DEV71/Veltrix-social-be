@@ -40,6 +40,11 @@ const productSchema = new mongoose.Schema(
     comboItems: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product'
+    }],
+    // Extra animated layers for profile effects (multiple GIFs stacked)
+    effectLayers: [{
+      type: String,
+      trim: true
     }]
   },
   {

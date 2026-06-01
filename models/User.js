@@ -124,6 +124,8 @@ const userSchema = new mongoose.Schema(
       ref: 'Product',
       default: null,
     },
+    activeProfileEffectStaticUrl: { type: String, default: null },
+    activeProfileEffectAnimatedUrl: { type: String, default: null },
 
     // Friends System
     friends: [{ 

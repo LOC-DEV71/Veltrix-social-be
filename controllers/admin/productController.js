@@ -52,7 +52,8 @@ const addProduct = async (req, res) => {
       animatedUrl,
       category: pCategory || null,
       isCombo: pIsCombo === 'true' || pIsCombo === true,
-      comboItems: pComboItems ? JSON.parse(pComboItems) : []
+      comboItems: pComboItems ? JSON.parse(pComboItems) : [],
+      effectLayers: req.files?.effectLayers ? req.files.effectLayers.map(f => f.path) : []
     });
 
     await newProduct.save();
@@ -207,6 +208,18 @@ const updateProduct = async (req, res) => {
       const oldPublicId = getCloudinaryPublicId(existingProduct.animatedUrl);
       if (oldPublicId) await cloudinary.uploader.destroy(oldPublicId);
       updateData.animatedUrl = req.files.animatedImage[0].path;
+    }
+
+    // Handle effectLayers (for profile effects)
+    if (req.files?.effectLayers) {
+      // Delete old layers from Cloudinary
+      if (existingProduct.effectLayers && existingProduct.effectLayers.length > 0) {
+        for (const layerUrl of existingProduct.effectLayers) {
+          const oldId = getCloudinaryPublicId(layerUrl);
+          if (oldId) await cloudinary.uploader.destroy(oldId);
+        }
+      }
+      updateData.effectLayers = req.files.effectLayers.map(f => f.path);
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true })

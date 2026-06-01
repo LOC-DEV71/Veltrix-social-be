@@ -59,7 +59,7 @@ router.get('/:channelId', async (req, res) => {
     let dbQuery = Message.find(query)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl themeColors',
         populate: {
           path: 'activeFrame',
           model: 'Product'
@@ -180,7 +180,7 @@ router.post('/:channelId', verifyToken, upload.array('attachments', 5), async (r
     const populatedMessage = await Message.findById(newMessage._id)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl themeColors',
         populate: {
           path: 'activeFrame',
           model: 'Product'
@@ -318,7 +318,7 @@ router.put('/:channelId/:messageId', verifyToken, async (req, res) => {
     const populatedMessage = await Message.findById(messageId)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl themeColors',
         populate: {
           path: 'activeFrame',
           model: 'Product'
@@ -436,7 +436,7 @@ router.post('/:channelId/:messageId/reactions', verifyToken, async (req, res) =>
     const populatedMessage = await Message.findById(messageId)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl themeColors',
         populate: { path: 'activeFrame', model: 'Product' }
       })
       .populate({
@@ -490,7 +490,7 @@ router.put('/:channelId/:messageId/pin', verifyToken, async (req, res) => {
     const populatedMessage = await Message.findById(messageId)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl themeColors',
         populate: { path: 'activeFrame', model: 'Product' }
       })
       .populate({

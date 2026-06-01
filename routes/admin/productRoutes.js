@@ -11,10 +11,11 @@ const {
   bulkActionProducts
 } = require('../../controllers/admin/productController');
 
-// Cấu hình multer xử lý 2 trường ảnh
+// Cấu hình multer xử lý 2 trường ảnh chính + extra layers cho hiệu ứng hồ sơ
 const cpUpload = upload.fields([
   { name: 'staticImage', maxCount: 1 },
-  { name: 'animatedImage', maxCount: 1 }
+  { name: 'animatedImage', maxCount: 1 },
+  { name: 'effectLayers', maxCount: 5 }
 ]);
 
 // @route   GET /api/admin/products/list

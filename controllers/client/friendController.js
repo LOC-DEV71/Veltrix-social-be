@@ -7,7 +7,7 @@ exports.getFriendsData = async (req, res) => {
     const user = await User.findById(req.user.id)
       .populate({
         path: 'friends',
-        select: 'username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl',
+        select: 'username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
         populate: [
           { path: 'activeFrame', select: 'staticUrl animatedUrl name' },
           { path: 'activeNameplate', select: 'staticUrl animatedUrl name' }
@@ -15,7 +15,7 @@ exports.getFriendsData = async (req, res) => {
       })
       .populate({
         path: 'friendRequests.user',
-        select: 'username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl',
+        select: 'username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
         populate: [
           { path: 'activeFrame', select: 'staticUrl animatedUrl name' },
           { path: 'activeNameplate', select: 'staticUrl animatedUrl name' }
@@ -85,7 +85,7 @@ exports.sendFriendRequest = async (req, res) => {
 
     // Lấy thông tin người gửi để báo cho người nhận realtime
     const populatedSender = await User.findById(senderId)
-      .select('username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl')
+      .select('username displayName avatar activeFrame activeNameplate isPremium activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl')
       .populate('activeFrame', 'staticUrl animatedUrl name')
       .populate('activeNameplate', 'staticUrl animatedUrl name');
 
@@ -223,6 +223,40 @@ exports.removeFriend = async (req, res) => {
     }
 
     res.status(200).json({ success: true, message: 'Đã hủy kết bạn.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Lấy danh sách bạn chung
+exports.getMutualFriends = async (req, res) => {
+  try {
+    const targetId = req.params.userId;
+    const currentUserId = req.user.id;
+
+    if (targetId === currentUserId) {
+      return res.status(200).json({ success: true, mutualFriends: [] });
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    const targetUser = await User.findById(targetId);
+
+    if (!currentUser || !targetUser) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+    }
+
+    // Convert friends arrays to strings for intersection
+    const currentUserFriends = currentUser.friends.map(id => id.toString());
+    const targetUserFriends = targetUser.friends.map(id => id.toString());
+
+    const mutualFriendIds = currentUserFriends.filter(id => targetUserFriends.includes(id));
+
+    const mutualFriends = await User.find({ _id: { $in: mutualFriendIds } })
+      .select('username displayName avatar activeFrame activeNameplate isPremium bannerColor bannerImage themeColors customStatus activeFrameStaticUrl activeFrameAnimatedUrl activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl')
+      .populate('activeFrame', 'staticUrl animatedUrl name')
+      .populate('activeNameplate', 'staticUrl animatedUrl name');
+
+    res.status(200).json({ success: true, mutualFriends });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

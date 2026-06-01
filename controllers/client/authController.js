@@ -149,7 +149,11 @@ const login = async (req, res) => {
     // Find User and populate frames
     const user = await User.findOne({ email })
       .populate('ownedFrames')
-      .populate('activeFrame');
+      .populate('activeFrame')
+      .populate('ownedNameplates')
+      .populate('activeNameplate')
+      .populate('ownedProfileEffects')
+      .populate('activeProfileEffect');
 
     if (!user) {
       return res.status(401).json({
@@ -208,6 +212,8 @@ const login = async (req, res) => {
         activeFrame: user.activeFrame,
         ownedNameplates: user.ownedNameplates,
         activeNameplate: user.activeNameplate,
+        ownedProfileEffects: user.ownedProfileEffects,
+        activeProfileEffect: user.activeProfileEffect,
         avatar: user.avatar,
         bannerColor: user.bannerColor,
         bannerImage: user.bannerImage
@@ -235,13 +241,15 @@ const getMe = async (req, res) => {
       });
     }
 
-    // Fetch fresh profile details from DB with populated frames
+    // Fetch fresh profile details from DB with populated items
     const user = await User.findById(req.user._id || req.user.id)
       .select('-password')
       .populate('ownedFrames')
       .populate('activeFrame')
       .populate('ownedNameplates')
-      .populate('activeNameplate');
+      .populate('activeNameplate')
+      .populate('ownedProfileEffects')
+      .populate('activeProfileEffect');
 
     if (!user) {
       return res.status(404).json({
@@ -298,7 +306,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    const { displayName, pronouns, bannerColor, activeFrame, activeNameplate, customStatus, username, removeBanner, removeAvatar, themePrimary, themeAccent } = req.body;
+    const { displayName, pronouns, bannerColor, activeFrame, activeNameplate, activeProfileEffect, customStatus, username, removeBanner, removeAvatar, themePrimary, themeAccent } = req.body;
 
     const user = await User.findById(req.user._id || req.user.id);
     if (!user) {
@@ -374,6 +382,21 @@ const updateProfile = async (req, res) => {
       }
     }
     
+    if (activeProfileEffect !== undefined) {
+      user.activeProfileEffect = activeProfileEffect || null; 
+      if (user.activeProfileEffect) {
+        const Product = require('../../models/Product');
+        const effect = await Product.findById(user.activeProfileEffect);
+        if (effect) {
+          user.activeProfileEffectStaticUrl = effect.staticUrl || null;
+          user.activeProfileEffectAnimatedUrl = effect.animatedUrl || null;
+        }
+      } else {
+        user.activeProfileEffectStaticUrl = null;
+        user.activeProfileEffectAnimatedUrl = null;
+      }
+    }
+    
     if (customStatus !== undefined) {
       if (customStatus === null) {
         user.customStatus = { text: null, emoji: null, expiresAt: null, updatedAt: null };
@@ -413,7 +436,9 @@ const updateProfile = async (req, res) => {
       .populate('ownedFrames')
       .populate('activeFrame')
       .populate('ownedNameplates')
-      .populate('activeNameplate');
+      .populate('activeNameplate')
+      .populate('ownedProfileEffects')
+      .populate('activeProfileEffect');
 
     res.status(200).json({
       status: 'success',
