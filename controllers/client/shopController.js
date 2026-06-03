@@ -43,10 +43,12 @@ const cleanupExpiredItems = async (user) => {
       // Remove from owned arrays safely using Mongoose pull
       if (user.ownedFrames) user.ownedFrames.pull(item.product);
       if (user.ownedNameplates) user.ownedNameplates.pull(item.product);
+      if (user.ownedProfileEffects) user.ownedProfileEffects.pull(item.product);
       
       // Safely get active item IDs (handles both populated and unpopulated)
       const activeFrameId = user.activeFrame ? (user.activeFrame._id ? user.activeFrame._id.toString() : user.activeFrame.toString()) : null;
       const activeNameplateId = user.activeNameplate ? (user.activeNameplate._id ? user.activeNameplate._id.toString() : user.activeNameplate.toString()) : null;
+      const activeProfileEffectId = user.activeProfileEffect ? (user.activeProfileEffect._id ? user.activeProfileEffect._id.toString() : user.activeProfileEffect.toString()) : null;
       
       // Unequip if active
       if (activeFrameId === prodIdStr) {
@@ -59,6 +61,13 @@ const cleanupExpiredItems = async (user) => {
         user.activeNameplate = null;
         user.activeNameplateStaticUrl = "";
         user.activeNameplateAnimatedUrl = "";
+      }
+
+      if (activeProfileEffectId === prodIdStr) {
+        user.activeProfileEffect = null;
+        user.activeProfileEffectStaticUrl = "";
+        user.activeProfileEffectAnimatedUrl = "";
+        user.activeProfileEffectLayers = [];
       }
     });
     
@@ -210,11 +219,13 @@ const claimPremiumProduct = async (req, res) => {
       const categorySlug = item.category ? item.category.slug : 'unknown';
       const isFrame = categorySlug === 'khung-vien';
       const isNameplate = categorySlug === 'bang-ten';
+      const isProfileEffect = categorySlug === 'hieu-ung-ho-so';
 
       // Kiểm tra xem đã nhận hoặc mua chưa
       let alreadyOwned = false;
       if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
       if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+      if (isProfileEffect && user.ownedProfileEffects.includes(item._id.toString())) alreadyOwned = true;
 
       // Nếu đã sở hữu vĩnh viễn (không phải premium perk, không có expiresAt) thì skip
       // Nếu đã sở hữu nhưng là premium perk thì vẫn skip vì đang xử lý premium
@@ -230,6 +241,12 @@ const claimPremiumProduct = async (req, res) => {
         user.activeNameplate = item._id;
         user.activeNameplateStaticUrl = item.staticUrl || null;
         user.activeNameplateAnimatedUrl = item.animatedUrl || null;
+      } else if (isProfileEffect) {
+        user.ownedProfileEffects.push(item._id);
+        user.activeProfileEffect = item._id;
+        user.activeProfileEffectStaticUrl = item.staticUrl || null;
+        user.activeProfileEffectAnimatedUrl = item.animatedUrl || null;
+        user.activeProfileEffectLayers = item.effectLayers || [];
       }
 
       inventory.items.push({
@@ -476,10 +493,12 @@ const buyProduct = async (req, res) => {
         const categorySlug = item.category ? item.category.slug : 'unknown';
         const isFrame = categorySlug === 'khung-vien';
         const isNameplate = categorySlug === 'bang-ten';
+        const isProfileEffect = categorySlug === 'hieu-ung-ho-so';
 
         let alreadyOwned = false;
         if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
         if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+        if (isProfileEffect && user.ownedProfileEffects.includes(item._id.toString())) alreadyOwned = true;
 
         if (alreadyOwned) {
           discount += item.price || 0;
@@ -502,10 +521,12 @@ const buyProduct = async (req, res) => {
       const categorySlug = item.category ? item.category.slug : 'unknown';
       const isFrame = categorySlug === 'khung-vien';
       const isNameplate = categorySlug === 'bang-ten';
+      const isProfileEffect = categorySlug === 'hieu-ung-ho-so';
 
       let alreadyOwned = false;
       if (isFrame && user.ownedFrames.includes(item._id.toString())) alreadyOwned = true;
       if (isNameplate && user.ownedNameplates.includes(item._id.toString())) alreadyOwned = true;
+      if (isProfileEffect && user.ownedProfileEffects.includes(item._id.toString())) alreadyOwned = true;
 
       // Ghi đè thành vĩnh viễn
       let isUpgradeToPermanent = false;
@@ -532,6 +553,12 @@ const buyProduct = async (req, res) => {
             user.activeNameplate = item._id;
             user.activeNameplateStaticUrl = item.staticUrl || null;
             user.activeNameplateAnimatedUrl = item.animatedUrl || null;
+          } else if (isProfileEffect) {
+            user.ownedProfileEffects.push(item._id);
+            user.activeProfileEffect = item._id;
+            user.activeProfileEffectStaticUrl = item.staticUrl || null;
+            user.activeProfileEffectAnimatedUrl = item.animatedUrl || null;
+            user.activeProfileEffectLayers = item.effectLayers || [];
           }
         }
 
@@ -567,7 +594,9 @@ const buyProduct = async (req, res) => {
       .populate('ownedFrames')
       .populate('activeFrame')
       .populate('ownedNameplates')
-      .populate('activeNameplate');
+      .populate('activeNameplate')
+      .populate('ownedProfileEffects')
+      .populate('activeProfileEffect');
 
     res.status(200).json({
       status: 'success',

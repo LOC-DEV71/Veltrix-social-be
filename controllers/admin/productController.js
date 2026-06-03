@@ -22,13 +22,20 @@ const addProduct = async (req, res) => {
     }
 
     // Lấy URL từ file đã upload qua Cloudinary
-    const staticUrl = req.files?.staticImage ? req.files.staticImage[0].path : null;
-    const animatedUrl = req.files?.animatedImage ? req.files.animatedImage[0].path : null;
+    let staticUrl = req.files?.staticImage ? req.files.staticImage[0].path : null;
+    let animatedUrl = req.files?.animatedImage ? req.files.animatedImage[0].path : null;
+    const effectLayers = req.files?.effectLayers ? req.files.effectLayers.map(f => f.path) : [];
+
+    // Fallback if profile effect layers are uploaded but static/animated are not
+    if (effectLayers.length > 0) {
+      if (!staticUrl) staticUrl = effectLayers[0];
+      if (!animatedUrl) animatedUrl = effectLayers[0];
+    }
 
     if (!name || price === undefined || Number(price) <= 0 || (!(isCombo === 'true' || isCombo === true) && (!staticUrl || !animatedUrl))) {
       return res.status(400).json({
         success: false,
-        message: 'Vui lòng cung cấp đầy đủ thông tin: name, price (>0) và tải lên 2 ảnh (nếu không phải Combo)'
+        message: 'Vui lòng cung cấp đầy đủ thông tin: name, price (>0) và tải lên ít nhất 1 ảnh (nếu không phải Combo)'
       });
     }
 
@@ -53,7 +60,7 @@ const addProduct = async (req, res) => {
       category: pCategory || null,
       isCombo: pIsCombo === 'true' || pIsCombo === true,
       comboItems: pComboItems ? JSON.parse(pComboItems) : [],
-      effectLayers: req.files?.effectLayers ? req.files.effectLayers.map(f => f.path) : []
+      effectLayers: effectLayers
     });
 
     await newProduct.save();
@@ -219,7 +226,16 @@ const updateProduct = async (req, res) => {
           if (oldId) await cloudinary.uploader.destroy(oldId);
         }
       }
-      updateData.effectLayers = req.files.effectLayers.map(f => f.path);
+      const newEffectLayers = req.files.effectLayers.map(f => f.path);
+      updateData.effectLayers = newEffectLayers;
+      
+      // Update fallback URLs if they aren't explicitly provided
+      if (!req.files?.staticImage) {
+        updateData.staticUrl = newEffectLayers[0];
+      }
+      if (!req.files?.animatedImage) {
+        updateData.animatedUrl = newEffectLayers[0];
+      }
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true })

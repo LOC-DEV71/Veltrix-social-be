@@ -126,6 +126,7 @@ const userSchema = new mongoose.Schema(
     },
     activeProfileEffectStaticUrl: { type: String, default: null },
     activeProfileEffectAnimatedUrl: { type: String, default: null },
+    activeProfileEffectLayers: [{ type: String }],
 
     // Friends System
     friends: [{ 

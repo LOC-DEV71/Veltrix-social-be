@@ -112,7 +112,7 @@ const initSocket = (server) => {
         const populatedMessage = await Message.findById(newMessage._id)
           .populate({
             path: 'sender',
-            select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl themeColors',
+            select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
             populate: {
               path: 'activeFrame',
               model: 'Product'

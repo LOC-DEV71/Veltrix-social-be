@@ -53,10 +53,19 @@ app.use('/api/admin/premium-products', premiumProductRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error('🔴 Global Error:', err.message, err.stack);
+  console.error('🔴 Global Error:', err.message);
+  
+  let userMessage = 'Lỗi hệ thống máy chủ!';
+  if (err.message && err.message.includes('File size too large')) {
+    userMessage = 'Dung lượng ảnh quá lớn! Cloudinary giới hạn ảnh tối đa 10MB.';
+  } else if (err.message) {
+    userMessage = err.message;
+  }
+
   res.status(500).json({
+    status: 'error',
     success: false,
-    message: 'Internal Server Error',
+    message: userMessage,
     error: err.message
   });
 });
@@ -66,3 +75,9 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🟢 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
+
+// trigger restart
+
+// trigger restart 2
+
+// trigger restart 3

@@ -59,7 +59,7 @@ router.get('/:channelId', async (req, res) => {
     let dbQuery = Message.find(query)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl themeColors',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
         populate: {
           path: 'activeFrame',
           model: 'Product'
@@ -180,7 +180,7 @@ router.post('/:channelId', verifyToken, upload.array('attachments', 5), async (r
     const populatedMessage = await Message.findById(newMessage._id)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl themeColors',
+        select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
         populate: {
           path: 'activeFrame',
           model: 'Product'

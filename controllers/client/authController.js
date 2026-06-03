@@ -390,10 +390,12 @@ const updateProfile = async (req, res) => {
         if (effect) {
           user.activeProfileEffectStaticUrl = effect.staticUrl || null;
           user.activeProfileEffectAnimatedUrl = effect.animatedUrl || null;
+          user.activeProfileEffectLayers = effect.effectLayers || [];
         }
       } else {
         user.activeProfileEffectStaticUrl = null;
         user.activeProfileEffectAnimatedUrl = null;
+        user.activeProfileEffectLayers = [];
       }
     }
     
