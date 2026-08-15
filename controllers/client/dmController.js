@@ -1,6 +1,7 @@
 const DMRoom = require('../../models/DMRoom');
 const DirectMessage = require('../../models/DirectMessage');
 const User = require('../../models/User');
+const Community = require('../../models/Community');
 
 // @desc    Get or create 1-on-1 DM room with a target user
 // @route   POST /api/dm/get-or-create
@@ -27,6 +28,11 @@ const getOrCreateDMRoom = async (req, res) => {
     if (!targetUser) {
       return res.status(404).json({ success: false, message: 'Target user not found' });
     }
+
+    // Calculate mutual communities shared between currentUserId and targetUserId
+    const mutualCommunities = await Community.find({
+      'members.user': { $all: [currentUserId, targetUserId] }
+    }).select('_id name icon banner');
 
     // Check if 1-on-1 DM room already exists between currentUserId and targetUserId
     let room = await DMRoom.findOne({
@@ -66,7 +72,8 @@ const getOrCreateDMRoom = async (req, res) => {
       success: true,
       data: {
         room,
-        recipient: targetUser
+        recipient: targetUser,
+        mutualCommunities: mutualCommunities || []
       }
     });
   } catch (error) {
