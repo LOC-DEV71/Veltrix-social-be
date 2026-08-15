@@ -94,7 +94,7 @@ const getUserDMRooms = async (req, res) => {
       .sort({ lastActivity: -1 })
       .populate({
         path: 'participants',
-        select: 'username displayName avatar activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl',
+        select: '-password -email',
         populate: [{ path: 'activeFrame' }, { path: 'activeNameplate' }]
       })
       .populate({
@@ -102,9 +102,23 @@ const getUserDMRooms = async (req, res) => {
         populate: { path: 'sender', select: 'username displayName' }
       });
 
+    // Deduplicate rooms by partner user ID
+    const seenPartnerIds = new Set();
+    const uniqueRooms = [];
+    for (const room of rooms) {
+      const partner = (room.participants || []).find(p => p && String(p._id || p.id) !== String(currentUserId));
+      if (partner) {
+        const partnerId = String(partner._id || partner.id);
+        if (!seenPartnerIds.has(partnerId)) {
+          seenPartnerIds.add(partnerId);
+          uniqueRooms.push(room);
+        }
+      }
+    }
+
     res.status(200).json({
       success: true,
-      data: rooms
+      data: uniqueRooms
     });
   } catch (error) {
     console.error('🔴 Error in getUserDMRooms:', error);
