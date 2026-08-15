@@ -51,19 +51,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes Mounting
 const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
 const premiumProductRoutes = require('./routes/admin/premiumProductRoutes'); // Premium route
 const messageRoutes = require('./routes/messageRoutes');
 const communityRoutes = require('./routes/communityRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const dmRoutes = require('./routes/client/dmRoutes');
 
 app.use('/api', clientRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/dm', dmRoutes);
 app.use('/api/admin/premium-products', premiumProductRoutes);
 
 // Global Error Handler

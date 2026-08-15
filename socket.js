@@ -319,6 +319,39 @@ const initSocket = (server) => {
       }
     });
 
+    // === DM (Direct Messaging) Socket Handlers ===
+    socket.on('join_dm_room', (roomId) => {
+      if (roomId) {
+        socket.join(`dm_${roomId}`);
+        console.log(`💬 Client ${socket.id} joined DM room: dm_${roomId}`);
+      }
+    });
+
+    socket.on('leave_dm_room', (roomId) => {
+      if (roomId) {
+        socket.leave(`dm_${roomId}`);
+        console.log(`👋 Client ${socket.id} left DM room: dm_${roomId}`);
+      }
+    });
+
+    socket.on('send_dm_message', ({ roomId, message }) => {
+      if (roomId && message) {
+        io.to(`dm_${roomId}`).emit('receive_dm_message', message);
+      }
+    });
+
+    socket.on('dm_typing_start', ({ roomId, user }) => {
+      if (roomId) {
+        socket.to(`dm_${roomId}`).emit('dm_typing_start', { roomId, user });
+      }
+    });
+
+    socket.on('dm_typing_stop', ({ roomId, user }) => {
+      if (roomId) {
+        socket.to(`dm_${roomId}`).emit('dm_typing_stop', { roomId, user });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`🔌 Client disconnected from chat: ${socket.id}`);
       
