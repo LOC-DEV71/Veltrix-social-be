@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../../middlewares/authMiddleware');
+const { verifyToken } = require('../../middleware/authMiddleware');
 const {
   getOrCreateDMRoom,
   getUserDMRooms,
@@ -9,7 +9,7 @@ const {
   toggleReaction
 } = require('../../controllers/client/dmController');
 
-router.use(protect);
+router.use(verifyToken);
 
 router.post('/get-or-create', getOrCreateDMRoom);
 router.get('/rooms', getUserDMRooms);
