@@ -21,6 +21,7 @@ const getOrCreateDMRoom = async (req, res) => {
 
     // Find recipient user profile
     const targetUser = await User.findById(targetUserId)
+      .select('-password -email')
       .populate('activeFrame')
       .populate('activeNameplate')
       .populate('activeProfileEffect');
@@ -41,7 +42,7 @@ const getOrCreateDMRoom = async (req, res) => {
     })
       .populate({
         path: 'participants',
-        select: 'username displayName avatar bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl pronouns createdAt',
+        select: '-password -email',
         populate: [
           { path: 'activeFrame' },
           { path: 'activeNameplate' },
@@ -59,7 +60,7 @@ const getOrCreateDMRoom = async (req, res) => {
       room = await DMRoom.findById(room._id)
         .populate({
           path: 'participants',
-          select: 'username displayName avatar bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl pronouns createdAt',
+          select: '-password -email',
           populate: [
             { path: 'activeFrame' },
             { path: 'activeNameplate' },
