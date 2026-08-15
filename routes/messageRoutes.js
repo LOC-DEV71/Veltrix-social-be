@@ -8,6 +8,7 @@ const { verifyToken } = require('../middleware/authMiddleware');
 const { checkPermission } = require('../utils/permissionUtils');
 const { upload } = require('../config/cloudinary');
 const { getIO } = require('../socket');
+const ogs = require('open-graph-scraper');
 
 // @desc    Get messages by channel ObjectId
 // @route   GET /api/messages/:channelId
@@ -46,18 +47,85 @@ router.get('/:channelId', async (req, res) => {
       }
     }
 
-    const { pinned, before, limit = 30 } = req.query;
+    const { pinned, before, around, limit = 30 } = req.query;
 
     let query = { channel: channelId };
+    
+    // We will handle 'around' specially
+    let dbQuery;
+    let messages = [];
+
     if (pinned === 'true') {
       query.isPinned = true;
-    } else if (before) {
-      query.createdAt = { $lt: new Date(before) };
+      dbQuery = Message.find(query)
+    } else if (around) {
+      // 'around' is a messageId. First find the target message to get its createdAt.
+      const targetMessage = await Message.findById(around);
+      if (!targetMessage) {
+        return res.status(404).json({ success: false, message: 'Message not found' });
+      }
+      
+      const aroundDate = targetMessage.createdAt || targetMessage._id.getTimestamp();
+      if (!aroundDate) {
+        return res.status(400).json({ success: false, message: 'Message has no valid timestamp' });
+      }
+      console.log('DEBUG AROUND:', { id: targetMessage._id, createdAt: targetMessage.createdAt, aroundDate });
+      const limitNum = Number(limit);
+      const halfLimit = Math.floor(limitNum / 2);
+      
+      const beforeQuery = Message.find({ channel: channelId, createdAt: { $lte: aroundDate } }).sort({ createdAt: -1 }).limit(halfLimit + 1);
+      const afterQuery = Message.find({ channel: channelId, createdAt: { $gt: aroundDate } }).sort({ createdAt: 1 }).limit(halfLimit);
+
+      
+      const [beforeMessages, afterMessages] = await Promise.all([
+        beforeQuery.populate({
+          path: 'sender',
+          select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
+          populate: { path: 'activeFrame', model: 'Product' }
+        }).populate({
+          path: 'reactions.users',
+          select: 'username displayName avatar bannerColor bannerImage'
+        }).populate({
+          path: 'replyTo',
+          select: 'content sender attachments',
+          populate: { path: 'sender', select: 'username displayName avatar' }
+        }),
+        afterQuery.populate({
+          path: 'sender',
+          select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
+          populate: { path: 'activeFrame', model: 'Product' }
+        }).populate({
+          path: 'reactions.users',
+          select: 'username displayName avatar bannerColor bannerImage'
+        }).populate({
+          path: 'replyTo',
+          select: 'content sender attachments',
+          populate: { path: 'sender', select: 'username displayName avatar' }
+        })
+      ]);
+      
+      // beforeMessages is sorted descending, reverse it
+      const reversedBefore = beforeMessages.reverse();
+      messages = [...reversedBefore, ...afterMessages];
+      
+      return res.status(200).json({
+        status: 'success',
+        count: messages.length,
+        aroundDate: aroundDate,
+        data: messages
+      });
+      
+    } else {
+      if (before) {
+        query.createdAt = { $lt: new Date(before) };
+      }
+      dbQuery = Message.find(query)
     }
 
-    // Find messages for the channel
-    let dbQuery = Message.find(query)
-      .populate({
+    if (!around) {
+      dbQuery = dbQuery
+        .populate({
+
         path: 'sender',
         select: 'username displayName avatar coins isPremium bannerColor bannerImage activeFrame activeFrameStaticUrl activeFrameAnimatedUrl customStatus activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl activeProfileEffectLayers themeColors',
         populate: {
@@ -95,6 +163,7 @@ router.get('/:channelId', async (req, res) => {
       count: messages.length,
       data: messages
     });
+    }
   } catch (error) {
     console.error(`🔴 Get Messages Error: ${error.message}`);
     res.status(500).json({
@@ -170,6 +239,30 @@ router.post('/:channelId', verifyToken, upload.array('attachments', 5), async (r
       community: communityId,
       attachments: attachments,
     };
+
+    if (messageData.content) {
+      const urlRegex = /(https?:\/\/[^\s]+)/;
+      const match = messageData.content.match(urlRegex);
+      require('fs').appendFileSync('og_debug.log', 'Matched URL: ' + (match ? match[0] : 'null') + '\n');
+      if (match) {
+        try {
+          const { result } = await ogs({ url: match[0], timeout: 5000 });
+          require('fs').appendFileSync('og_debug.log', 'OGS Result: ' + JSON.stringify(result) + '\n');
+          if (result && result.success) {
+            messageData.linkMetadata = {
+              title: result.ogTitle || result.twitterTitle || '',
+              description: result.ogDescription || result.twitterDescription || '',
+              image: (result.ogImage && result.ogImage.length > 0) ? result.ogImage[0].url : (result.twitterImage && result.twitterImage.length > 0 ? result.twitterImage[0].url : ''),
+              url: result.ogUrl || match[0],
+              siteName: result.ogSiteName || '',
+            };
+            require('fs').appendFileSync('og_debug.log', 'Set linkMetadata: ' + JSON.stringify(messageData.linkMetadata) + '\n');
+          }
+        } catch (ogErr) {
+          require('fs').appendFileSync('og_debug.log', 'OGS Error: ' + ogErr.message + '\n');
+        }
+      }
+    }
 
     if (replyTo) {
       messageData.replyTo = replyTo;

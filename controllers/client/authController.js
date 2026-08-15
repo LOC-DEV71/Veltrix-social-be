@@ -7,6 +7,28 @@ const OTP = require('../../models/OTP');
 const { getCookieOptions, getClearCookieOptions } = require('../../utils/cookieOptions');
 const { sendWelcomeEmail, sendOTPEmail } = require('../../utils/sendEmail');
 
+// @desc    Get user profile by ID
+// @route   GET /api/auth/profile/:userId
+// @access  Private
+const getUserProfileById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select('-password -email')
+      .populate('activeFrame')
+      .populate('activeNameplate')
+      .populate('activeProfileEffect');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+    }
+
+    res.status(200).json({ success: true, data: user });
+  } catch (error) {
+    console.error('🔴 Lỗi khi lấy thông tin người dùng:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+  }
+};
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // @desc    Register a new user
@@ -772,6 +794,7 @@ module.exports = {
   updateProfile,
   googleLogin,
   sendOTP,
-  verifyOTP
+  verifyOTP,
+  getUserProfileById
 };
 

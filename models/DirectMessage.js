@@ -27,6 +27,13 @@ const directMessageSchema = new mongoose.Schema(
         name: String
       }
     ],
+    linkMetadata: {
+      title: String,
+      description: String,
+      image: String,
+      url: String,
+      siteName: String,
+    },
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'DirectMessage',

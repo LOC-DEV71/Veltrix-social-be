@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, getMe, logout, updateProfile, googleLogin, sendOTP, verifyOTP } = require('../../controllers/client/authController');
+const { register, login, getMe, logout, updateProfile, googleLogin, sendOTP, verifyOTP, getUserProfileById } = require('../../controllers/client/authController');
 const { verifyToken } = require('../../middleware/authMiddleware');
 const { upload } = require('../../config/cloudinary');
 
@@ -29,6 +29,9 @@ router.post('/logout', logout);
 
 // GET /api/auth/me (Private - requires verifyToken verification)
 router.get('/me', verifyToken, getMe);
+
+// GET /api/auth/profile/:userId (Private - fetch public profile of a user)
+router.get('/profile/:userId', verifyToken, getUserProfileById);
 
 // PUT /api/auth/profile (Private)
 router.put('/profile', verifyToken, profileUpload, updateProfile);

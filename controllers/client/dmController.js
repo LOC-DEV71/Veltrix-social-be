@@ -2,6 +2,8 @@ const DMRoom = require('../../models/DMRoom');
 const DirectMessage = require('../../models/DirectMessage');
 const User = require('../../models/User');
 const Community = require('../../models/Community');
+const Notification = require('../../models/Notification');
+const ogs = require('open-graph-scraper');
 
 // @desc    Get or create 1-on-1 DM room with a target user
 // @route   POST /api/dm/get-or-create
@@ -144,7 +146,7 @@ const getDMMessages = async (req, res) => {
       .limit(limit)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar role activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
+        select: 'username displayName avatar role isPremium bannerColor bannerImage themeColors customStatus createdAt aboutMe pronouns activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
         populate: [{ path: 'activeFrame' }, { path: 'activeNameplate' }, { path: 'activeProfileEffect' }]
       })
       .populate({
@@ -176,12 +178,35 @@ const sendDirectMessage = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied to this DM room' });
     }
 
+    let linkMetadata = undefined;
+    if (content) {
+      const urlRegex = /(https?:\/\/[^\s]+)/;
+      const match = content.match(urlRegex);
+      if (match) {
+        try {
+          const { result } = await ogs({ url: match[0], timeout: 5000 });
+          if (result && result.success) {
+            linkMetadata = {
+              title: result.ogTitle || result.twitterTitle || '',
+              description: result.ogDescription || result.twitterDescription || '',
+              image: (result.ogImage && result.ogImage.length > 0) ? result.ogImage[0].url : (result.twitterImage && result.twitterImage.length > 0 ? result.twitterImage[0].url : ''),
+              url: result.ogUrl || match[0],
+              siteName: result.ogSiteName || '',
+            };
+          }
+        } catch (ogErr) {
+          console.error('OG Scraper error in DM:', ogErr.message);
+        }
+      }
+    }
+
     const newMsg = await DirectMessage.create({
       dmRoom: roomId,
       sender: req.user._id,
       content,
       attachments: attachments || [],
-      replyTo: replyToId || null
+      replyTo: replyToId || null,
+      ...(linkMetadata && { linkMetadata })
     });
 
     // Update room lastMessage and lastActivity
@@ -192,7 +217,7 @@ const sendDirectMessage = async (req, res) => {
     const populatedMsg = await DirectMessage.findById(newMsg._id)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar role activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
+        select: 'username displayName avatar role isPremium bannerColor bannerImage themeColors customStatus createdAt aboutMe pronouns activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
         populate: [{ path: 'activeFrame' }, { path: 'activeNameplate' }, { path: 'activeProfileEffect' }]
       })
       .populate({
@@ -245,7 +270,7 @@ const toggleReaction = async (req, res) => {
     const updated = await DirectMessage.findById(msgId)
       .populate({
         path: 'sender',
-        select: 'username displayName avatar role activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
+        select: 'username displayName avatar role isPremium bannerColor bannerImage themeColors customStatus createdAt aboutMe pronouns activeFrame activeFrameStaticUrl activeFrameAnimatedUrl activeNameplate activeNameplateStaticUrl activeNameplateAnimatedUrl activeProfileEffect activeProfileEffectStaticUrl activeProfileEffectAnimatedUrl',
         populate: [{ path: 'activeFrame' }, { path: 'activeNameplate' }, { path: 'activeProfileEffect' }]
       })
       .populate({

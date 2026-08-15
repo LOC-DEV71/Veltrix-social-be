@@ -96,7 +96,6 @@ const initSocket = (server) => {
           return;
         }
 
-        // Save message to database using correct schema field names
         const messageData = {
           sender: senderId,
           content: content ? content.trim() : '',
@@ -104,6 +103,29 @@ const initSocket = (server) => {
           community: communityId,
           attachments: attachments || [],
         };
+
+        if (messageData.content) {
+          const urlRegex = /(https?:\/\/[^\s]+)/;
+          const match = messageData.content.match(urlRegex);
+          if (match) {
+            try {
+              const ogs = require('open-graph-scraper');
+              const { result } = await ogs({ url: match[0], timeout: 5000 });
+              if (result && result.success) {
+                messageData.linkMetadata = {
+                  title: result.ogTitle || result.twitterTitle || '',
+                  description: result.ogDescription || result.twitterDescription || '',
+                  image: (result.ogImage && result.ogImage.length > 0) ? result.ogImage[0].url : (result.twitterImage && result.twitterImage.length > 0 ? result.twitterImage[0].url : ''),
+                  url: result.ogUrl || match[0],
+                  siteName: result.ogSiteName || '',
+                };
+              }
+            } catch (ogErr) {
+              console.error('OGS error in socket:', ogErr.message);
+            }
+          }
+        }
+
         if (replyTo) {
           messageData.replyTo = replyTo;
         }

@@ -41,6 +41,13 @@ const messageSchema = new mongoose.Schema(
         name: String,
       }
     ],
+    linkMetadata: {
+      title: String,
+      description: String,
+      image: String,
+      url: String,
+      siteName: String,
+    },
     // For replies or mentions
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
