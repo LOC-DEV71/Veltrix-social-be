@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const Account = require('../../models/Account');
+const { getCookieOptions, getClearCookieOptions } = require('../../utils/cookieOptions');
 
 // @desc    Admin staff login
 // @route   POST /api/admin/auth/login
@@ -60,13 +61,8 @@ const login = async (req, res) => {
     );
 
     // Save token inside HttpOnly secure cookie
-    const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie('adminToken', token, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
+    res.cookie('adminToken', token, getCookieOptions({ maxAge: 24 * 60 * 60 * 1000 }));
+
 
     res.status(200).json({
       success: true,
@@ -124,12 +120,7 @@ const getMe = async (req, res) => {
 // @route   POST /api/admin/auth/logout
 // @access  Public
 const logout = async (req, res) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  res.clearCookie('adminToken', {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax'
-  });
+  res.clearCookie('adminToken', getClearCookieOptions());
   res.status(200).json({
     success: true,
     message: 'Đã đăng xuất tài khoản quản trị thành công!'

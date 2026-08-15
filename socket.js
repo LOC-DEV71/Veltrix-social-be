@@ -43,29 +43,30 @@ const initSocket = (server) => {
     // Join a specific user private room for notifications (like friend requests)
     socket.on('join_user_room', (userId) => {
       if (userId) {
-        socket.userId = userId;
-        socket.join(`user_${userId}`);
+        const uIdStr = String(userId);
+        socket.userId = uIdStr;
+        socket.join(`user_${uIdStr}`);
         
         // Track online status
-        if (!onlineUsers.has(userId)) {
-          onlineUsers.set(userId, new Set());
+        if (!onlineUsers.has(uIdStr)) {
+          onlineUsers.set(uIdStr, new Set());
         }
-        const userSockets = onlineUsers.get(userId);
+        const userSockets = onlineUsers.get(uIdStr);
         
         // If this is their first connection, broadcast they are online
         if (userSockets.size === 0) {
-          io.emit('user_status_change', { userId, isOnline: true });
+          io.emit('user_status_change', { userId: uIdStr, isOnline: true });
         }
         userSockets.add(socket.id);
         
-        console.log(`👤 Client ${socket.id} registered for private notifications: user_${userId}`);
+        console.log(`👤 Client ${socket.id} registered for private notifications: user_${uIdStr}`);
       }
     });
 
     // Provide list of all currently online users
     socket.on('get_online_users', (callback) => {
       if (typeof callback === 'function') {
-        callback(Array.from(onlineUsers.keys()));
+        callback(Array.from(onlineUsers.keys()).map(String));
       }
     });
 

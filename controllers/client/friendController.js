@@ -55,7 +55,10 @@ exports.sendFriendRequest = async (req, res) => {
 
     if (!targetUsername) return res.status(400).json({ success: false, message: 'Missing target username' });
 
-    const targetUser = await User.findOne({ username: targetUsername });
+    const cleanUsername = targetUsername.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const targetUser = await User.findOne({ 
+      username: { $regex: new RegExp(`^${cleanUsername}$`, 'i') } 
+    });
     if (!targetUser) return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng này!' });
 
     if (targetUser._id.toString() === senderId.toString()) {
