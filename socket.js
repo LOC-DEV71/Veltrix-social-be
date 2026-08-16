@@ -12,7 +12,10 @@ const onlineUsers = new Map(); // userId -> Set of socket.id
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: (origin, callback) => {
+        // Allow all origins to match the Express setup and prevent CORS issues
+        callback(null, true);
+      },
       methods: ['GET', 'POST'],
       credentials: true
     },
