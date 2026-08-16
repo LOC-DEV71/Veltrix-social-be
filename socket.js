@@ -4,6 +4,7 @@ const User = require('./models/User');
 const Community = require('./models/Community');
 const Notification = require('./models/Notification');
 const Channel = require('./models/Channel');
+const SystemLog = require('./models/SystemLog');
 const { checkPermission } = require('./utils/permissionUtils');
 
 let io;
@@ -16,11 +17,56 @@ const initSocket = (server) => {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    pingTimeout: 7000,
+    pingInterval: 3000
   });
+
+  const broadcastSystemEvent = async (level, message) => {
+    const timeString = new Date().toLocaleTimeString('en-US', { hour12: false });
+    
+    // Save to DB
+    try {
+      await SystemLog.create({ level, message, timeString });
+      
+      // Giữ lại tối đa 20 bản ghi mới nhất
+      const count = await SystemLog.countDocuments();
+      if (count > 20) {
+        const logsToDelete = await SystemLog.find().sort({ createdAt: 1 }).limit(count - 20).select('_id');
+        const idsToDelete = logsToDelete.map(log => log._id);
+        await SystemLog.deleteMany({ _id: { $in: idsToDelete } });
+      }
+    } catch (err) {
+      console.error('Failed to save system log:', err.message);
+    }
+
+    // Calculate current metrics
+    const webSocketConnections = (io.engine && io.engine.clientsCount) || (io.sockets && io.sockets.sockets.size) || 0;
+    const webRtcSessions = io.voiceChannels 
+      ? Object.values(io.voiceChannels).reduce((acc, curr) => acc + curr.length, 0) 
+      : 0;
+
+    // Broadcast to live dashboards with absolute metrics
+    io.to('admin_room').emit('system_event', { 
+      time: timeString, 
+      level, 
+      message,
+      metrics: {
+        webSocketConnections,
+        webRtcSessions
+      }
+    });
+  };
 
   io.on('connection', (socket) => {
     console.log(`🔌 Client connected to real-time chat: ${socket.id}`);
+    broadcastSystemEvent('INFO', `Client connected: ${socket.id}`);
+
+    // Admin room subscription
+    socket.on('join_admin_room', () => {
+      socket.join('admin_room');
+      broadcastSystemEvent('INFO', `Admin dashboard attached to telemetry stream.`);
+    });
 
     // Join a specific channel room
     socket.on('join_channel', (channelId) => {
@@ -103,9 +149,10 @@ const initSocket = (server) => {
           channel: channelId,
           community: communityId,
           attachments: attachments || [],
+          isSticker: data.isSticker || false,
         };
 
-        if (messageData.content) {
+        if (messageData.content && !messageData.isSticker) {
           const urlRegex = /(https?:\/\/[^\s]+)/;
           const match = messageData.content.match(urlRegex);
           if (match) {
@@ -153,6 +200,9 @@ const initSocket = (server) => {
 
         // Broadcast to all clients in the channel room
         io.to(channelId).emit('receive_message', populatedMessage);
+        
+        // Notify admin dashboard for realtime traffic chart updates
+        broadcastSystemEvent('INFO', `New message sent by ${populatedMessage.sender.username} in channel ${channelId}`);
         
         // Create notifications for all community members (mention or channel_message)
         const populatedCommunity = await Community.findById(communityId).populate('members.user', 'username displayName name');
@@ -278,6 +328,7 @@ const initSocket = (server) => {
       });
 
       console.log(`🎤 ${voiceUser.username} joined voice channel ${channelId}`);
+      broadcastSystemEvent('INFO', `🎤 ${voiceUser.username} joined voice channel ${channelId}`);
     });
 
     socket.on('voice_state_update', ({ channelId, state }) => {
@@ -299,6 +350,7 @@ const initSocket = (server) => {
       if (leftUser) {
         io.to(`voice_${channelId}`).emit('voice_user_left', leftUser._id);
         console.log(`🎤 ${leftUser.username} left voice channel ${channelId}`);
+        broadcastSystemEvent('WARN', `🎤 ${leftUser.username} left voice channel ${channelId}`);
       }
 
       // Clean up empty channels
@@ -314,6 +366,11 @@ const initSocket = (server) => {
     });
 
     // WebRTC Signaling relay
+    socket.on('join_webrtc_room', ({ roomId, userId }) => {
+      socket.join(roomId);
+      broadcastSystemEvent('INFO', `User ${userId} joined WebRTC session: ${roomId}`);
+    });
+
     socket.on('voice_offer', ({ to, offer }) => {
       // Find the target socket
       const targetChannel = socket.voiceChannelId;
@@ -360,6 +417,7 @@ const initSocket = (server) => {
     socket.on('send_dm_message', ({ roomId, message }) => {
       if (roomId && message) {
         io.to(`dm_${roomId}`).emit('receive_dm_message', message);
+        broadcastSystemEvent('INFO', `New message sent in DM room ${roomId}`);
       }
     });
 
@@ -376,7 +434,8 @@ const initSocket = (server) => {
     });
 
     socket.on('disconnect', () => {
-      console.log(`🔌 Client disconnected from chat: ${socket.id}`);
+      console.log(`🔴 Client disconnected: ${socket.id}`);
+      broadcastSystemEvent('WARN', `Client disconnected: ${socket.id}`);
       
       // Clean up voice channel
       if (socket.voiceChannelId && io.voiceChannels) {
@@ -387,6 +446,7 @@ const initSocket = (server) => {
           
           if (leftUser) {
             io.to(`voice_${vcId}`).emit('voice_user_left', leftUser._id);
+            broadcastSystemEvent('WARN', `🎤 ${leftUser.username} left voice channel ${vcId} (disconnected)`);
           }
           
           if (io.voiceChannels[vcId].length === 0) {

@@ -27,6 +27,10 @@ const directMessageSchema = new mongoose.Schema(
         name: String
       }
     ],
+    isSticker: {
+      type: Boolean,
+      default: false,
+    },
     linkMetadata: {
       title: String,
       description: String,

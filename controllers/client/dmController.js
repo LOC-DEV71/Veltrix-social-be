@@ -206,7 +206,8 @@ const sendDirectMessage = async (req, res) => {
       content,
       attachments: attachments || [],
       replyTo: replyToId || null,
-      ...(linkMetadata && { linkMetadata })
+      isSticker: req.body.isSticker || false,
+      ...(linkMetadata && !req.body.isSticker && { linkMetadata })
     });
 
     // Update room lastMessage and lastActivity
