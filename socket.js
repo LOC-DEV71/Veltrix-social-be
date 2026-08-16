@@ -12,13 +12,11 @@ const onlineUsers = new Map(); // userId -> Set of socket.id
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: (origin, callback) => {
-        // Allow all origins to match the Express setup and prevent CORS issues
-        callback(null, true);
-      },
+      origin: true, // Automatically reflects the requesting origin (compatible with credentials: true)
       methods: ['GET', 'POST'],
       credentials: true
     },
+    transports: ['websocket', 'polling']
   });
 
   io.on('connection', (socket) => {
