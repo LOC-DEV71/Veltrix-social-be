@@ -41,10 +41,13 @@ const initSocket = (server) => {
     }
 
     // Calculate current metrics
-    const webSocketConnections = (io.engine && io.engine.clientsCount) || (io.sockets && io.sockets.sockets.size) || 0;
+    const totalSockets = (io.engine && io.engine.clientsCount) || (io.sockets && io.sockets.sockets.size) || 0;
+    const adminSockets = io.sockets.adapter.rooms?.get('admin_room')?.size || 0;
+    const webSocketConnections = Math.max(0, totalSockets - adminSockets);
     const webRtcSessions = io.voiceChannels 
       ? Object.values(io.voiceChannels).reduce((acc, curr) => acc + curr.length, 0) 
       : 0;
+    const onlineUsersCount = onlineUsers.size;
 
     // Broadcast to live dashboards with absolute metrics
     io.to('admin_room').emit('system_event', { 
@@ -53,7 +56,8 @@ const initSocket = (server) => {
       message,
       metrics: {
         webSocketConnections,
-        webRtcSessions
+        webRtcSessions,
+        onlineUsersCount
       }
     });
   };

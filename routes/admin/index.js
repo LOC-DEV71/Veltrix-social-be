@@ -40,16 +40,18 @@ router.get('/stats', verifyToken, isAdmin, async (req, res) => {
 
     let webSocketConnections = 0;
     let webRtcSessions = 0;
-    try {
-      const { getIO } = require('../../socket.js');
-      const io = getIO();
-      webSocketConnections = (io.engine && io.engine.clientsCount) || (io.sockets && io.sockets.sockets.size) || 0;
-      if (io.voiceChannels) {
-        webRtcSessions = Object.values(io.voiceChannels).reduce((acc, curr) => acc + curr.length, 0) || 0;
+      try {
+        const { getIO } = require('../../socket.js');
+        const io = getIO();
+        const totalSockets = (io.engine && io.engine.clientsCount) || (io.sockets && io.sockets.sockets.size) || 0;
+        const adminSockets = io.sockets.adapter.rooms?.get('admin_room')?.size || 0;
+        webSocketConnections = Math.max(0, totalSockets - adminSockets);
+        if (io.voiceChannels) {
+          webRtcSessions = Object.values(io.voiceChannels).reduce((acc, curr) => acc + curr.length, 0) || 0;
+        }
+      } catch (err) {
+        console.warn('Could not fetch socket metrics for stats');
       }
-    } catch (err) {
-      console.warn('Could not fetch socket metrics for stats');
-    }
 
     // 📈 Calculate True Rolling 24h Traffic Data (Messages per 4-hour block)
     const Message = require('../../models/Message');
